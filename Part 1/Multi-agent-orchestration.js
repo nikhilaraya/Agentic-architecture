@@ -1,133 +1,190 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
 
+// Initialize the Anthropic client.
+// Assumes ANTHROPIC_API_KEY is configured in your environment variables.
 const client = new Anthropic();
 const MODEL_NAME = "claude-3-5-sonnet-20241022";
 
-/**
- * Technical Subagent: Focuses on core mechanics, engineering, and architectural facts.
- */
-async function technicalSubagent(subtask) {
-  console.log(`   ↳ [Spoke: Technical] Analyzing: "${subtask}"`);
-  
-  const response = await client.messages.create({
-    model: MODEL_NAME,
-    max_tokens: 800,
-    system: "You are a Technical Research Specialist. Provide deep architectural, technical, or scientific data regarding the given subtask. Keep your response highly factual, technical, and concise.",
-    messages: [{ role: "user", content: subtask }]
-  });
-  
-  return response.content[0].text;
-}
+// ============================================================================
+// 1. SPOKE AGENTS (Specialized Workers)
+// ============================================================================
 
 /**
- * Market Subagent: Focuses on industry impacts, business trends, and societal implications.
+ * Specialized Subagent Worker
+ * Executes a single, isolated research task provided by the Coordinator.
  */
-async function marketSubagent(subtask) {
-  console.log(`   ↳ [Spoke: Market/Society] Analyzing: "${subtask}"`);
+async function executeSubagentWorker(subtopicTitle, assignmentPrompt) {
+  console.log(`   🚀 Dispatching [Spoke Subagent] -> Topic: "${subtopicTitle}"`);
   
   const response = await client.messages.create({
     model: MODEL_NAME,
-    max_tokens: 800,
-    system: "You are an Industry & Market Analyst. Focus on trends, economic impacts, business use cases, and societal implications regarding the given subtask. Keep your response concise.",
-    messages: [{ role: "user", content: subtask }]
+    max_tokens: 1000,
+    system: `You are a specialized Senior Research Analyst. Your job is to investigate a single, highly isolated subtopic. 
+    Provide deep architectural facts, empirical evidence, current challenges, and clear insights.
+    Stay strictly within the boundaries of your assignment. Do not generalize outside your specific subtopic field.`,
+    messages: [
+      { 
+        role: "user", 
+        content: `Your assigned subtopic is: "${subtopicTitle}".\nExecute this research assignment:\n${assignmentPrompt}` 
+      }
+    ]
   });
   
-  return response.content[0].text;
+  return {
+    title: subtopicTitle,
+    findings: response.content[0].text
+  };
 }
+
+
+// ============================================================================
+// 2. HUB AGENT (The Coordinator Engine)
+// ============================================================================
 
 /**
  * Central Hub Coordinator Agent
- * Controls Task Decomposition, Delegation, and Aggregation.
+ * Manages Task Decomposition, Subagent Delegation, and Final Result Aggregation.
  */
 async function runCoordinatorAgent(broadTopic) {
-  console.log(`\n=== COORDINATOR START: "${broadTopic}" ===\n`);
+  console.log(`\n================================================================`);
+  // Hub-and-Spoke architectural pattern representation
+  console.log(`🏛️  COORDINATOR AGENT ACTIVATED`);
+  console.log(`🎯 Target Topic: "${broadTopic}"`);
+  console.log(`================================================================\n`);
 
-  // --- STEP 1: TASK DECOMPOSITION ---
-  // The coordinator decomposes the broad topic into clear, structured sub-tasks.
-  console.log(`[Step 1] Decomposing topic into sub-tasks...`);
-  
-  const decompositionPrompt = `
-    Analyze this broad research topic: "${broadTopic}".
-    Decompose it into exactly two distinct sub-tasks:
-    1. A deeply technical sub-task suited for an engineer.
-    2. A market/societal impact sub-task suited for a business analyst.
-    
-    Return your response strictly as a JSON object matching this format:
-    {
-      "technicalTask": "the specific technical aspect to research",
-      "marketTask": "the specific market/social aspect to research"
+  // --------------------------------------------------------------------------
+  // STAGE 1: COMPREHENSIVE TASK DECOMPOSITION (Preventing Narrow Coverage)
+  // --------------------------------------------------------------------------
+  console.log(`[Stage 1] Executing High-Breadth Task Decomposition...`);
+
+  // Tool schema enforcing a structural, broad array of at least 5 subtopics
+  const decompositionTool = {
+    name: "submit_decomposed_tasks",
+    description: "Submits a broad-breadth breakdown of the research topic containing at least 5 distinct angles.",
+    input_schema: {
+      type: "object",
+      properties: {
+        subtopics: {
+          type: "array",
+          description: "A comprehensive list of at least 5 distinct subtopics covering the full spectrum of the subject matter.",
+          minItems: 5, // Explicit JSON Schema constraint
+          items: {
+            type: "object",
+            properties: {
+              title: { 
+                type: "string", 
+                description: "The specific subtopic category name." 
+              },
+              researchAssignment: { 
+                type: "string", 
+                description: "Detailed, isolated prompt guidelines mapping out the precise questions the subagent must answer." 
+              }
+            },
+            required: ["title", "researchAssignment"]
+          }
+        }
+      },
+      required: ["subtopics"]
     }
-    Do not include any introductory or concluding text outside the JSON.
-  `;
+  };
 
   const decompResponse = await client.messages.create({
     model: MODEL_NAME,
-    max_tokens: 400,
-    system: "You are a master research coordinator. Your job is to break down broad queries into discrete, non-overlapping tasks for specialized subagents. You always reply in raw JSON.",
-    messages: [{ role: "user", content: decompositionPrompt }]
+    max_tokens: 1500,
+    system: `You are a Principal Research Architect. Your job is to decompose broad concepts into isolated sub-tasks for a network of subagents. 
+    
+    CRITICAL ARCHITECTURE RULE: Avoid narrow thinking. You must break the topic down into at least 5 distinct, non-overlapping subtopics that cover the entire landscape of the subject (mainstream channels, emerging technologies, infrastructure dependencies, geopolitical/macroeconomic factors, and regulatory or environmental constraints). 
+    
+    Examples of required breadth:
+    - Topic 'Renewable Energy': Do not stop at Solar and Wind. You must include Geothermal, Tidal/Hydrokinetic, Biomass, and frontiers like Hydrogen/Fusion.
+    - Topic 'Autonomous Vehicles': Cover Sensor Technology (LiDAR/Radar), Computer Vision Models, Edge Compute Hardware Infrastructure, Legal/Ethical Liability, and Public Transit integration Frameworks.`,
+    
+    messages: [
+      { role: "user", content: `Perform a comprehensive task decomposition for the topic: "${broadTopic}"` }
+    ],
+    tools: [decompositionTool],
+    tool_choice: { type: "tool", name: "submit_decomposed_tasks" }
   });
 
-  // Parse the coordinator's decomposition strategy
-  const tasks = JSON.parse(decompResponse.content[0].text.trim());
-  console.log(`[Step 1 Result] Tasks identified:`);
-  console.log(`   ↳ Technical: "${tasks.technicalTask}"`);
-  console.log(`   ↳ Market:    "${tasks.marketTask}"\n`);
+  // Extract the structured tool block parameters
+  const toolCall = decompResponse.content.find(block => block.type === "tool_use");
+  if (!toolCall) {
+    throw new Error("Decomposition Error: Claude failed to return the required structured tool block.");
+  }
+
+  const subtasks = toolCall.input.subtopics;
+  console.log(`   ↳ Success: Generated ${subtasks.length} distinct research subtasks.\n`);
 
 
-  // --- STEP 2: SUBAGENT SELECTION & EXECUTION ---
-  // The coordinator targets and dispatches tasks to the appropriate "spoke" workers.
-  console.log(`[Step 2] Dispatching workloads to specialized subagents concurrently...`);
+  // --------------------------------------------------------------------------
+  // STAGE 2: SUBAGENT SELECTION & EXECUTION (Concurrently running Spokes)
+  // --------------------------------------------------------------------------
+  console.log(`[Stage 2] Dispatching workloads to specialized subagents concurrently...`);
   
-  const [technicalReport, marketReport] = await Promise.all([
-    technicalSubagent(tasks.technicalTask),
-    marketSubagent(tasks.marketTask)
-  ]);
+  // Concurrently execute all independent subagent requests to save latency time
+  const workerPromises = subtasks.map(task => 
+    executeSubagentWorker(task.title, task.researchAssignment)
+  );
   
-  console.log(`\n[Step 2 Result] Both subagents successfully returned findings.\n`);
+  const rawSubagentReports = await Promise.all(workerPromises);
+  console.log(`   ↳ Success: Received comprehensive reports from all ${rawSubagentReports.length} spoke subagents.\n`);
 
 
-  // --- STEP 3: RESULT AGGREGATION ---
-  // The coordinator gathers the raw components and reviews, aligns, and merges them.
-  console.log(`[Step 3] Coordinating and synthesizing final structured research report...`);
+  // --------------------------------------------------------------------------
+  // STAGE 3: RESULT AGGREGATION & BRIEFING DOCUMENT SYNTHESIS
+  // --------------------------------------------------------------------------
+  console.log(`[Stage 3] Hub synthesizing raw subagent reports into a unified Briefing Document...`);
+
+  // Format the collected subagent documents cleanly to feed back into the Hub
+  const formattedSubagentInputs = rawSubagentReports.map((report, i) => {
+    return `### SUBAGENT REPORT ${i + 1}: ${report.title}\n${report.findings}\n---`;
+  }).join("\n\n");
 
   const aggregationPrompt = `
-    You are the Lead Research Coordinator. You have collected two specialized research inputs regarding the broad topic: "${broadTopic}".
+    You are the Senior Director of Research. You have received ${rawSubagentReports.length} specialized technical reports regarding the macro topic: "${broadTopic}".
     
-    [Input 1: Technical Analysis]
-    ${technicalReport}
+    Your goal is to synthesize these individual, isolated inputs into one seamless, comprehensive Executive Briefing Report. Eliminate redundancies, smooth out stylistic changes between authors, and bridge the connections between different subtopics.
     
-    [Input 2: Market & Societal Analysis]
-    ${marketReport}
+    Here are the raw subagent reports to aggregate:
+    ${formattedSubagentInputs}
     
-    Synthesize these raw inputs into a comprehensive, cohesive Final Research Report. 
-    The report must contain:
-    - An Executive Summary
-    - Core Technological Architecture Breakdown (Synthesized from Input 1)
-    - Commercialization & Industry Impact Mapping (Synthesized from Input 2)
-    - A brief "Future Outlook" reconciling both technical barriers and market opportunities.
+    The Final Consolidated Report must be structured with the following layout:
+    1. Executive Summary: A high-level view of the entire landscape.
+    2. Deep-Dive Domain Analyses: Individual synthesized sections for each of the researched subtopics.
+    3. Structural Cross-Impact Assessment: A analytical evaluation showing how these subtopics interact or depend on one another.
+    4. Strategic Roadmap / Future Forecast: Clear, actionable conclusions regarding where this broad topic heading.
   `;
 
   const finalResponse = await client.messages.create({
     model: MODEL_NAME,
-    max_tokens: 1500,
-    system: "You are a Senior Research Director. Your task is to aggregate independent research threads into a single, cohesive, premium-tier executive briefing document. Ensure uniform tone and eliminate redundancies.",
+    max_tokens: 3000, // Large buffer allocation for the comprehensive compiled document
+    system: "You are an Elite Research Editor. Your objective is to compile multi-author fragments into a highly cohesive, rigorous technical document with a uniform, executive-tier voice.",
     messages: [{ role: "user", content: aggregationPrompt }]
   });
 
-  console.log(`\n=== 🏁 COORDINATOR TASK COMPLETE ===\n`);
+  console.log(`🏛️  COORDINATOR AGENT SUCCESSFULY CONCLUDED LIFE CYCLE\n`);
   return finalResponse.content[0].text;
 }
 
+
+// ============================================================================
+// 3. RUNNER IMPLEMENTATION
+// ============================================================================
 async function main() {
   try {
-    const broadTopic = "The integration of Solid-State Batteries in Consumer Electric Vehicles";
-    const finalReport = await runCoordinatorAgent(broadTopic);
+    // This classic broad query tests whether our engine triggers a comprehensive 5+ topic layout
+    const macroSubject = "Next-Generation Global Renewable Energy Infrastructure";
     
-    console.log("=================== FINAL SYNTHESIZED REPORT ===================");
-    console.log(finalReport);
-    console.log("================================================================");
+    const briefingDocument = await runCoordinatorAgent(macroSubject);
+    
+    console.log("==========================================================================");
+    console.log("🏆 FINAL SYNTHESIZED EXECUTIVE BRIEFING DOCUMENT");
+    console.log("==========================================================================");
+    console.log(briefingDocument);
+    console.log("==========================================================================");
+
   } catch (error) {
-    console.error("Orchestration Framework Failed:", error);
+    console.error("Critical System Framework Crash:", error);
   }
 }
 
