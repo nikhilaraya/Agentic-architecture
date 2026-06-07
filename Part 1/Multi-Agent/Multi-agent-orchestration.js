@@ -1,14 +1,6 @@
 const { Anthropic } = require('@anthropic-ai/sdk');
-
-// Initialize the Anthropic client.
-// Assumes ANTHROPIC_API_KEY is configured in your environment variables.
 const client = new Anthropic();
 const MODEL_NAME = "claude-3-5-sonnet-20241022";
-
-// ============================================================================
-// 1. SPOKE AGENTS (Specialized Workers)
-// ============================================================================
-
 /**
  * Specialized Subagent Worker
  * Executes a single, isolated research task provided by the Coordinator.
@@ -166,10 +158,6 @@ async function runCoordinatorAgent(broadTopic) {
   return finalResponse.content[0].text;
 }
 
-
-// ============================================================================
-// 3. RUNNER IMPLEMENTATION
-// ============================================================================
 async function main() {
   try {
     // This classic broad query tests whether our engine triggers a comprehensive 5+ topic layout
