@@ -73,7 +73,7 @@ async function runAgent(userPrompt) {
 
         if (iterationCount >= MAX_ITERATIONS) {
             console.warn(
-                `⚠️ SAFETY BOUNDARY TRIGGERED: Hit maximum iteration cap of ${MAX_ITERATIONS}. ` +
+                `SAFETY BOUNDARY TRIGGERED: Hit maximum iteration cap of ${MAX_ITERATIONS}. ` +
                 `Forcefully stopping to protect against API token runaway.`
             );
             throw new Error("Agent execution aborted: Safety iteration cap reached.");
